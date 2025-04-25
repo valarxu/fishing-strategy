@@ -1,0 +1,10 @@
+{
+  "name": "okx-btc-kline",
+  "version": "1.0.0",
+  "description": "OKX BTC 1h kline websocket example",
+  "main": "index.js",
+  "dependencies": {
+    "ws": "^8.16.0"
+  },
+  "type": "module"
+} 
