@@ -2,6 +2,7 @@ const WebSocketClient = require('./websocketClient');
 const TradingStrategy = require('./strategy');
 const PositionManager = require('./positionManager');
 const Trader = require('./trader');
+const notifier = require('./notifier');
 
 class TradingBot {
     constructor() {
@@ -9,6 +10,10 @@ class TradingBot {
         this.positionManager = new PositionManager();
         this.trader = new Trader();
         this.wsClient = new WebSocketClient(this.handleKlineClose.bind(this));
+    }
+
+    async notifyPositionStatus() {
+        await notifier.notifyPositionStatus(this.strategy.positions);
     }
 
     async initialize() {
@@ -19,6 +24,8 @@ class TradingBot {
                 this.strategy.positions = savedPositions;
                 this.strategy.currentPositions = savedPositions.length;
                 console.log('已加载保存的仓位:', savedPositions);
+                // 初始化时推送一次持仓状态
+                await this.notifyPositionStatus();
             }
 
             // 连接WebSocket
@@ -43,17 +50,23 @@ class TradingBot {
                 const positions = this.strategy.clearAllPositions();
                 await this.trader.stopLoss(positions, kline.close);
                 await this.positionManager.clearPositions();
+                // 止损后推送持仓状态
+                await this.notifyPositionStatus();
                 return;
             }
 
             // 检查是否满足平仓条件
             const positionsToClose = this.strategy.shouldClosePositions(kline);
-            for (const { index, position } of positionsToClose) {
-                console.log('准备平仓:', position);
-                const amount = position.amount || (position.size / position.buyPrice);
-                await this.trader.closePosition(kline.close, amount);
-                this.strategy.closePosition(index);
-                await this.positionManager.removePosition(index);
+            if (positionsToClose.length > 0) {
+                for (const { index, position } of positionsToClose) {
+                    console.log('准备平仓:', position);
+                    const amount = position.amount || (position.size / position.buyPrice);
+                    await this.trader.closePosition(kline.close, amount);
+                    this.strategy.closePosition(index);
+                    await this.positionManager.removePosition(index);
+                }
+                // 平仓后推送持仓状态
+                await this.notifyPositionStatus();
             }
 
             // 检查是否满足开仓条件
@@ -63,6 +76,8 @@ class TradingBot {
                 const position = this.strategy.openPosition(kline);
                 position.orderId = order.id;
                 await this.positionManager.addPosition(position);
+                // 开仓后推送持仓状态
+                await this.notifyPositionStatus();
             }
         } catch (error) {
             console.error('处理K线数据时出错:', error);
