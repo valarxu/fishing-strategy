@@ -1,10 +1,16 @@
 {
-  "name": "okx-btc-kline",
+  "name": "fishing-strategy",
   "version": "1.0.0",
-  "description": "OKX BTC 1h kline websocket example",
-  "main": "index.js",
+  "description": "Cryptocurrency trading bot with Telegram notifications",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
   "dependencies": {
+    "ccxt": "^4.2.15",
+    "dotenv": "^16.4.1",
+    "node-telegram-bot-api": "^0.64.0",
     "ws": "^8.16.0"
   },
-  "type": "module"
+  "type": "commonjs"
 } 
