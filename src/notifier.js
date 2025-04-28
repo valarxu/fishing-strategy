@@ -50,10 +50,8 @@ class Notifier {
 
         let message = '📊 当前持仓状态：\n\n';
         positions.forEach((pos, index) => {
-            message += `${index + 1}. ${config.SYMBOL}\n` +
-                `   开仓价：${pos.buyPrice}\n` +
-                `   数量：${pos.amount}\n` +
-                `   金额：${pos.size} USDT\n\n`;
+            message += `${index + 1}. ${config.SYMBOL.replace('-USDT', '')} | 开仓价：${pos.buyPrice} | 预期平仓价：${pos.expectedSellPrice}\n` +
+                `时间：${new Date(pos.timestamp).toLocaleString()}\n`;
         });
         message += `${config.IS_SIMULATION ? '【模拟交易】' : '【实盘交易】'}`;
 
