@@ -5,36 +5,50 @@ class TradingStrategy {
         this.positions = [];
         this.currentPositions = 0;
         this.markPrice = 0;
-        this.expectedBuyPrice = 0;
+        this.initialized = false;
     }
 
-    // 更新标记价格和预期开仓价格
-    updatePrices(closePrice) {
-        if (this.currentPositions === 0 && closePrice > this.markPrice) {
-            this.markPrice = closePrice;
-            this.expectedBuyPrice = closePrice * (1 - config.PRICE_CHANGE_THRESHOLD);
+    // 初始化批量开仓
+    initializeBatchOrders(initialPrice) {
+        if (this.initialized) return;
+        
+        const orders = [];
+        let currentPrice = initialPrice;
+        
+        for (let i = 0; i < 100; i++) {
+            orders.push({
+                buyPrice: currentPrice,
+                expectedSellPrice: currentPrice * (1 + config.PRICE_CHANGE_THRESHOLD),
+                timestamp: Date.now()
+            });
+            currentPrice = currentPrice * (1 - 0.005); // 每个订单价格降低0.5%
         }
+        
+        this.initialized = true;
+        return orders;
+    }
+
+    // 更新标记价格
+    updatePrices(closePrice) {
+        this.markPrice = closePrice;
     }
 
     // 检查是否满足开仓条件
     shouldOpenPosition(kline) {
-        return kline.close <= this.expectedBuyPrice && 
-               this.currentPositions < config.MAX_POSITIONS;
+        return !this.initialized && this.currentPositions === 0;
     }
 
     // 检查是否满足平仓条件
     shouldClosePositions(kline) {
         const positionsToClose = [];
         
-        // 从后往前检查每个仓位
-        for (let i = this.positions.length - 1; i >= 0; i--) {
+        for (let i = 0; i < this.positions.length; i++) {
             const position = this.positions[i];
             if (kline.close >= position.expectedSellPrice) {
                 positionsToClose.push({
                     index: i,
                     position: position
                 });
-                break; // 一次只平一个仓位
             }
         }
 
@@ -43,12 +57,10 @@ class TradingStrategy {
 
     // 检查是否需要止损
     shouldStopLoss(kline) {
-        if (this.currentPositions === config.MAX_POSITIONS) {
-            // 计算均价
+        if (this.currentPositions > 0) {
             const totalBuyPrice = this.positions.reduce((sum, pos) => sum + pos.buyPrice, 0);
             const averagePrice = totalBuyPrice / this.positions.length;
 
-            // 检查是否触发止损
             if (kline.close < averagePrice * config.STOP_LOSS_THRESHOLD) {
                 return {
                     averagePrice,
@@ -69,9 +81,6 @@ class TradingStrategy {
 
         this.positions.push(position);
         this.currentPositions++;
-        this.markPrice = kline.close;
-        this.expectedBuyPrice = this.markPrice * (1 - config.PRICE_CHANGE_THRESHOLD);
-
         return position;
     }
 

@@ -10,6 +10,7 @@ class TradingBot {
         this.positionManager = new PositionManager();
         this.trader = new Trader();
         this.wsClient = new WebSocketClient(this.handleKlineClose.bind(this));
+        this.initialPrice = null;
     }
 
     async notifyPositionStatus() {
@@ -43,6 +44,23 @@ class TradingBot {
             // 更新价格
             this.strategy.updatePrices(kline.close);
 
+            // 如果是首次收到价格且没有仓位，准备批量开仓
+            if (!this.initialPrice && this.strategy.currentPositions === 0) {
+                this.initialPrice = kline.close;
+                const batchOrders = this.strategy.initializeBatchOrders(kline.close);
+                console.log('准备批量开仓，初始价格:', kline.close);
+                
+                // 提交所有开仓订单
+                for (const order of batchOrders) {
+                    const result = await this.trader.openPosition(order.buyPrice);
+                    const position = this.strategy.openPosition(kline);
+                    position.orderId = result.id;
+                    await this.positionManager.addPosition(position);
+                }
+                await this.notifyPositionStatus();
+                return;
+            }
+
             // 检查是否需要止损
             const stopLossSignal = this.strategy.shouldStopLoss(kline);
             if (stopLossSignal) {
@@ -50,7 +68,6 @@ class TradingBot {
                 const positions = this.strategy.clearAllPositions();
                 await this.trader.stopLoss(positions, kline.close);
                 await this.positionManager.clearPositions();
-                // 止损后推送持仓状态
                 await this.notifyPositionStatus();
                 return;
             }
@@ -65,18 +82,6 @@ class TradingBot {
                     this.strategy.closePosition(index);
                     await this.positionManager.removePosition(index);
                 }
-                // 平仓后推送持仓状态
-                await this.notifyPositionStatus();
-            }
-
-            // 检查是否满足开仓条件
-            if (this.strategy.shouldOpenPosition(kline)) {
-                console.log('准备开仓，当前价格:', kline.close);
-                const order = await this.trader.openPosition(kline.close);
-                const position = this.strategy.openPosition(kline);
-                position.orderId = order.id;
-                await this.positionManager.addPosition(position);
-                // 开仓后推送持仓状态
                 await this.notifyPositionStatus();
             }
         } catch (error) {
@@ -94,4 +99,4 @@ process.on('SIGINT', async () => {
     console.log('正在关闭程序...');
     bot.wsClient.close();
     process.exit(0);
-}); 
+});
