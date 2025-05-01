@@ -4,94 +4,103 @@ const PositionManager = require('./positionManager');
 const Trader = require('./trader');
 const notifier = require('./notifier');
 
-class TradingBot {
-    constructor() {
-        this.strategy = new TradingStrategy();
-        this.positionManager = new PositionManager();
-        this.trader = new Trader();
-        this.wsClient = new WebSocketClient(this.handleKlineClose.bind(this));
-        this.initialPrice = null;
-    }
+// 创建交易机器人实例
+const createTradingBot = () => {
+    const strategy = new TradingStrategy();
+    const positionManager = new PositionManager();
+    const trader = new Trader();
+    let initialPrice = null;
 
-    async notifyPositionStatus() {
-        await notifier.notifyPositionStatus(this.strategy.positions);
-    }
+    // 通知持仓状态
+    const notifyPositionStatus = async () => {
+        await notifier.notifyPositionStatus(strategy.positions);
+    };
 
-    async initialize() {
-        try {
-            // 加载保存的仓位
-            const savedPositions = await this.positionManager.loadPositions();
-            if (savedPositions.length > 0) {
-                this.strategy.positions = savedPositions;
-                this.strategy.currentPositions = savedPositions.length;
-                console.log('已加载保存的仓位:', savedPositions);
-                // 初始化时推送一次持仓状态
-                await this.notifyPositionStatus();
-            }
-
-            // 连接WebSocket
-            this.wsClient.connect();
-        } catch (error) {
-            console.error('初始化失败:', error);
-            process.exit(1);
-        }
-    }
-
-    async handleKlineClose(kline) {
+    // 处理K线数据
+    const handleKlineClose = async (kline) => {
         try {
             console.log('收到5分钟K线:', kline);
 
             // 更新价格
-            this.strategy.updatePrices(kline.close);
+            strategy.updatePrices(kline.close);
 
             // 如果是首次收到价格且没有仓位，准备批量开仓
-            if (!this.initialPrice && this.strategy.currentPositions === 0) {
-                this.initialPrice = kline.close;
-                const batchOrders = this.strategy.initializeBatchOrders(kline.close);
+            if (!initialPrice && strategy.currentPositions === 0) {
+                initialPrice = kline.close;
+                const batchOrders = strategy.initializeBatchOrders(kline.close);
                 console.log('准备批量开仓，初始价格:', kline.close);
                 
                 // 提交所有开仓订单
                 for (const order of batchOrders) {
-                    const result = await this.trader.openPosition(order.buyPrice);
-                    const position = this.strategy.openPosition(kline);
+                    const result = await trader.openPosition(order.buyPrice);
+                    const position = strategy.openPosition(kline);
                     position.orderId = result.id;
-                    await this.positionManager.addPosition(position);
+                    await positionManager.addPosition(position);
                 }
-                await this.notifyPositionStatus();
+                await notifyPositionStatus();
                 return;
             }
 
             // 检查是否需要止损
-            const stopLossSignal = this.strategy.shouldStopLoss(kline);
+            const stopLossSignal = strategy.shouldStopLoss(kline);
             if (stopLossSignal) {
                 console.log('触发止损信号:', stopLossSignal);
-                const positions = this.strategy.clearAllPositions();
-                await this.trader.stopLoss(positions, kline.close);
-                await this.positionManager.clearPositions();
-                await this.notifyPositionStatus();
+                const positions = strategy.clearAllPositions();
+                await trader.stopLoss(positions, kline.close);
+                await positionManager.clearPositions();
+                await notifyPositionStatus();
                 return;
             }
 
             // 检查是否满足平仓条件
-            const positionsToClose = this.strategy.shouldClosePositions(kline);
+            const positionsToClose = strategy.shouldClosePositions(kline);
             if (positionsToClose.length > 0) {
                 for (const { index, position } of positionsToClose) {
                     console.log('准备平仓:', position);
                     const amount = position.amount || (position.size / position.buyPrice);
-                    await this.trader.closePosition(kline.close, amount);
-                    this.strategy.closePosition(index);
-                    await this.positionManager.removePosition(index);
+                    await trader.closePosition(kline.close, amount);
+                    strategy.closePosition(index);
+                    await positionManager.removePosition(index);
                 }
-                await this.notifyPositionStatus();
+                await notifyPositionStatus();
             }
         } catch (error) {
             console.error('处理K线数据时出错:', error);
         }
-    }
-}
+    };
+
+    // 初始化WebSocket客户端
+    const wsClient = new WebSocketClient(handleKlineClose);
+
+    // 初始化函数
+    const initialize = async () => {
+        try {
+            // 加载保存的仓位
+            const savedPositions = await positionManager.loadPositions();
+            if (savedPositions.length > 0) {
+                strategy.positions = savedPositions;
+                strategy.currentPositions = savedPositions.length;
+                console.log('已加载保存的仓位:', savedPositions);
+                // 初始化时推送一次持仓状态
+                await notifyPositionStatus();
+            }
+
+            // 连接WebSocket
+            wsClient.connect();
+        } catch (error) {
+            console.error('初始化失败:', error);
+            process.exit(1);
+        }
+    };
+
+    return {
+        initialize,
+        wsClient
+    };
+};
 
 // 启动程序
-const bot = new TradingBot();
+const bot = createTradingBot();
 bot.initialize().catch(console.error);
 
 // 优雅退出
