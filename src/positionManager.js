@@ -1,24 +1,24 @@
 const fs = require('fs').promises;
 const path = require('path');
 
-class PositionManager {
-    constructor() {
-        this.positionsFile = path.join(__dirname, '../data/positions.json');
-        this.ensureDataDirectory();
-    }
+// 创建仓位管理器实例
+const createPositionManager = () => {
+    const positionsFile = path.join(__dirname, '../data/positions.json');
 
-    async ensureDataDirectory() {
-        const dataDir = path.dirname(this.positionsFile);
+    // 确保数据目录存在
+    const ensureDataDirectory = async () => {
+        const dataDir = path.dirname(positionsFile);
         try {
             await fs.access(dataDir);
         } catch {
             await fs.mkdir(dataDir, { recursive: true });
         }
-    }
+    };
 
-    async loadPositions() {
+    // 加载仓位数据
+    const loadPositions = async () => {
         try {
-            const data = await fs.readFile(this.positionsFile, 'utf8');
+            const data = await fs.readFile(positionsFile, 'utf8');
             return JSON.parse(data);
         } catch (error) {
             if (error.code === 'ENOENT') {
@@ -28,37 +28,53 @@ class PositionManager {
             console.error('加载仓位数据失败:', error);
             throw error;
         }
-    }
+    };
 
-    async savePositions(positions) {
+    // 保存仓位数据
+    const savePositions = async (positions) => {
         try {
-            await fs.writeFile(this.positionsFile, JSON.stringify(positions, null, 2));
+            await fs.writeFile(positionsFile, JSON.stringify(positions, null, 2));
             console.log('仓位数据已保存');
         } catch (error) {
             console.error('保存仓位数据失败:', error);
             throw error;
         }
-    }
+    };
 
-    async addPosition(position) {
-        const positions = await this.loadPositions();
+    // 添加仓位
+    const addPosition = async (position) => {
+        const positions = await loadPositions();
         positions.push(position);
-        await this.savePositions(positions);
-    }
+        await savePositions(positions);
+    };
 
-    async removePosition(index) {
-        const positions = await this.loadPositions();
+    // 移除仓位
+    const removePosition = async (index) => {
+        const positions = await loadPositions();
         positions.splice(index, 1);
-        await this.savePositions(positions);
-    }
+        await savePositions(positions);
+    };
 
-    async clearPositions() {
-        await this.savePositions([]);
-    }
+    // 清空所有仓位
+    const clearPositions = async () => {
+        await savePositions([]);
+    };
 
-    async updatePositions(positions) {
-        await this.savePositions(positions);
-    }
-}
+    // 更新仓位
+    const updatePositions = async (positions) => {
+        await savePositions(positions);
+    };
 
-module.exports = PositionManager; 
+    // 初始化数据目录
+    ensureDataDirectory().catch(console.error);
+
+    return {
+        loadPositions,
+        addPosition,
+        removePosition,
+        clearPositions,
+        updatePositions
+    };
+};
+
+module.exports = createPositionManager; 

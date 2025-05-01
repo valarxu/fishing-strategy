@@ -1,57 +1,53 @@
 const WebSocket = require('ws');
 const config = require('./config');
 
-class WebSocketClient {
-    constructor(onKlineClose) {
-        this.ws = null;
-        this.onKlineClose = onKlineClose;
-    }
+// 创建WebSocket客户端实例
+const createWebSocketClient = (onKlineClose) => {
+    let ws = null;
 
-    connect() {
-        this.ws = new WebSocket(config.WS_URL);
+    // 连接WebSocket
+    const connect = () => {
+        ws = new WebSocket(config.WS_URL);
 
-        this.ws.on('open', () => {
-            console.log('已连接到 OKX WebSocket 服务器');
-            this.subscribe();
+        ws.on('open', () => {
+            console.log('WebSocket连接已建立');
+            subscribe();
         });
 
-        this.ws.on('message', (data) => {
+        ws.on('message', (data) => {
             try {
                 const message = JSON.parse(data);
-                if (message.arg && message.arg.channel === 'candle5m' && message.data) {
-                    const kline = message.data[0];
-                    const klineTimestamp = parseInt(kline[0], 10);
-                    const currentTime = Date.now();
-
-                    // 判断当前时间是否超过 K 线时间戳加上 5 分钟
-                    if (currentTime >= klineTimestamp + 300000) {
-                        const formattedKline = {
-                            timestamp: klineTimestamp,
-                            open: parseFloat(kline[1]),
-                            high: parseFloat(kline[2]),
-                            low: parseFloat(kline[3]),
-                            close: parseFloat(kline[4]),
-                            volume: parseFloat(kline[5])
-                        };
-                        this.onKlineClose(formattedKline);
-                    }
+                if (message.event === 'subscribe') {
+                    console.log('订阅成功:', message);
+                } else if (message.data) {
+                    const kline = {
+                        timestamp: message.data[0][0],
+                        open: parseFloat(message.data[0][1]),
+                        high: parseFloat(message.data[0][2]),
+                        low: parseFloat(message.data[0][3]),
+                        close: parseFloat(message.data[0][4]),
+                        volume: parseFloat(message.data[0][5])
+                    };
+                    onKlineClose(kline);
                 }
             } catch (error) {
-                console.error('解析数据时出错：', error);
+                console.error('处理WebSocket消息时出错:', error);
             }
         });
 
-        this.ws.on('error', (error) => {
-            console.error('WebSocket 错误：', error);
+        ws.on('error', (error) => {
+            console.error('WebSocket错误:', error);
         });
 
-        this.ws.on('close', () => {
-            console.log('连接已关闭，尝试重新连接...');
-            setTimeout(() => this.connect(), 5000);
+        ws.on('close', () => {
+            console.log('WebSocket连接已关闭');
+            // 尝试重新连接
+            setTimeout(connect, 5000);
         });
-    }
+    };
 
-    subscribe() {
+    // 订阅K线数据
+    const subscribe = () => {
         const subscribeMessage = {
             op: 'subscribe',
             args: [{
@@ -60,14 +56,20 @@ class WebSocketClient {
                 instType: 'SPOT'
             }]
         };
-        this.ws.send(JSON.stringify(subscribeMessage));
-    }
+        ws.send(JSON.stringify(subscribeMessage));
+    };
 
-    close() {
-        if (this.ws) {
-            this.ws.close();
+    // 关闭WebSocket连接
+    const close = () => {
+        if (ws) {
+            ws.close();
         }
-    }
-}
+    };
 
-module.exports = WebSocketClient; 
+    return {
+        connect,
+        close
+    };
+};
+
+module.exports = createWebSocketClient; 

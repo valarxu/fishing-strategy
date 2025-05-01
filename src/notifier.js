@@ -1,25 +1,31 @@
 const TelegramBot = require('node-telegram-bot-api');
 const config = require('./config');
 
-class Notifier {
-    constructor() {
-        if (config.TELEGRAM_BOT_TOKEN && config.TELEGRAM_CHAT_ID) {
-            this.bot = new TelegramBot(config.TELEGRAM_BOT_TOKEN, { polling: false });
-            this.chatId = config.TELEGRAM_CHAT_ID;
-        }
+// 创建通知器实例
+const createNotifier = () => {
+    let bot = null;
+
+    // 初始化Telegram机器人
+    if (config.TELEGRAM_BOT_TOKEN) {
+        bot = new TelegramBot(config.TELEGRAM_BOT_TOKEN, { polling: false });
     }
 
-    async sendMessage(message) {
-        if (this.bot && this.chatId) {
-            try {
-                await this.bot.sendMessage(this.chatId, message);
-            } catch (error) {
-                console.error('发送Telegram消息失败:', error);
-            }
+    // 发送消息
+    const sendMessage = async (message) => {
+        if (!bot || !config.TELEGRAM_CHAT_ID) {
+            console.log('Telegram通知:', message);
+            return;
         }
-    }
 
-    async notifyOpenPosition(position) {
+        try {
+            await bot.sendMessage(config.TELEGRAM_CHAT_ID, message);
+        } catch (error) {
+            console.error('发送Telegram消息失败:', error);
+        }
+    };
+
+    // 通知开仓
+    const notifyOpenPosition = async (position) => {
         const message = `🟢 开仓通知\n` +
             `交易对: ${config.SYMBOL}\n` +
             `开仓价格: ${position.buyPrice}\n` +
@@ -27,10 +33,11 @@ class Notifier {
             `开仓金额: ${position.size} USDT\n` +
             `${config.IS_SIMULATION ? '【模拟交易】' : '【实盘交易】'}`;
         
-        await this.sendMessage(message);
-    }
+        await sendMessage(message);
+    };
 
-    async notifyClosePosition(position, closePrice, profit) {
+    // 通知平仓
+    const notifyClosePosition = async (position, closePrice, profit) => {
         const message = `🔴 平仓通知\n` +
             `交易对: ${config.SYMBOL}\n` +
             `开仓价格: ${position.buyPrice}\n` +
@@ -39,12 +46,13 @@ class Notifier {
             `盈亏: ${profit.toFixed(2)} USDT\n` +
             `${config.IS_SIMULATION ? '【模拟交易】' : '【实盘交易】'}`;
 
-        await this.sendMessage(message);
-    }
+        await sendMessage(message);
+    };
 
-    async notifyPositionStatus(positions) {
+    // 通知持仓状态
+    const notifyPositionStatus = async (positions) => {
         if (!positions.length) {
-            await this.sendMessage('📊 当前无持仓');
+            await sendMessage('📊 当前无持仓');
             return;
         }
 
@@ -55,8 +63,14 @@ class Notifier {
         });
         message += `${config.IS_SIMULATION ? '【模拟交易】' : '【实盘交易】'}`;
 
-        await this.sendMessage(message);
-    }
-}
+        await sendMessage(message);
+    };
 
-module.exports = new Notifier(); 
+    return {
+        notifyOpenPosition,
+        notifyClosePosition,
+        notifyPositionStatus
+    };
+};
+
+module.exports = createNotifier(); 

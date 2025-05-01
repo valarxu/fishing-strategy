@@ -4,42 +4,47 @@ const notifier = require('./notifier');
 const fs = require('fs').promises;
 const path = require('path');
 
-class Trader {
-    constructor() {
-        if (!config.IS_SIMULATION) {
-            this.exchange = new ccxt.okx({
-                apiKey: config.API_KEY,
-                secret: config.API_SECRET,
-                password: config.PASSPHRASE
-            });
-        }
-        this.simulationLogFile = path.join(__dirname, '../logs/simulation.json');
+// 创建交易者实例
+const createTrader = () => {
+    let exchange = null;
+    const simulationLogFile = path.join(__dirname, '../logs/simulation.json');
+
+    // 初始化交易所
+    if (!config.IS_SIMULATION) {
+        exchange = new ccxt.okx({
+            apiKey: config.API_KEY,
+            secret: config.API_SECRET,
+            password: config.PASSPHRASE
+        });
     }
 
-    async logSimulatedTrade(type, data) {
+    // 记录模拟交易
+    const logSimulatedTrade = async (type, position) => {
         try {
+            const logEntry = {
+                type,
+                position,
+                timestamp: new Date().toISOString()
+            };
+
             let logs = [];
             try {
-                const content = await fs.readFile(this.simulationLogFile, 'utf8');
-                logs = JSON.parse(content);
+                const data = await fs.readFile(simulationLogFile, 'utf8');
+                logs = JSON.parse(data);
             } catch (error) {
-                // 如果文件不存在或为空，使用空数组
+                // 如果文件不存在，创建新文件
+                await fs.mkdir(path.dirname(simulationLogFile), { recursive: true });
             }
 
-            logs.push({
-                timestamp: new Date().toISOString(),
-                type,
-                ...data
-            });
-
-            await fs.mkdir(path.dirname(this.simulationLogFile), { recursive: true });
-            await fs.writeFile(this.simulationLogFile, JSON.stringify(logs, null, 2));
+            logs.push(logEntry);
+            await fs.writeFile(simulationLogFile, JSON.stringify(logs, null, 2));
         } catch (error) {
             console.error('记录模拟交易失败:', error);
         }
-    }
+    };
 
-    async openPosition(price) {
+    // 开仓
+    const openPosition = async (price) => {
         try {
             const amount = config.POSITION_SIZE / price;
             const position = {
@@ -52,7 +57,7 @@ class Trader {
             };
 
             if (config.IS_SIMULATION) {
-                await this.logSimulatedTrade('open', position);
+                await logSimulatedTrade('open', position);
                 console.log('模拟开仓成功:', position);
                 await notifier.notifyOpenPosition({
                     buyPrice: price,
@@ -61,7 +66,7 @@ class Trader {
                 });
                 return position;
             } else {
-                const order = await this.exchange.createOrder(
+                const order = await exchange.createOrder(
                     config.SYMBOL,
                     'limit',
                     'buy',
@@ -80,9 +85,10 @@ class Trader {
             console.error('开仓失败:', error);
             throw error;
         }
-    }
+    };
 
-    async closePosition(price, amount) {
+    // 平仓
+    const closePosition = async (price, amount) => {
         try {
             const position = {
                 symbol: config.SYMBOL,
@@ -94,7 +100,7 @@ class Trader {
             };
 
             if (config.IS_SIMULATION) {
-                await this.logSimulatedTrade('close', position);
+                await logSimulatedTrade('close', position);
                 console.log('模拟平仓成功:', position);
                 const profit = (price - position.price) * amount;
                 await notifier.notifyClosePosition({
@@ -103,7 +109,7 @@ class Trader {
                 }, price, profit);
                 return position;
             } else {
-                const order = await this.exchange.createOrder(
+                const order = await exchange.createOrder(
                     config.SYMBOL,
                     'limit',
                     'sell',
@@ -122,9 +128,10 @@ class Trader {
             console.error('平仓失败:', error);
             throw error;
         }
-    }
+    };
 
-    async stopLoss(positions, currentPrice) {
+    // 止损
+    const stopLoss = async (positions, currentPrice) => {
         try {
             const orders = [];
             for (const position of positions) {
@@ -138,10 +145,10 @@ class Trader {
                         cost: amount * currentPrice,
                         timestamp: Date.now()
                     };
-                    await this.logSimulatedTrade('stopLoss', simulatedOrder);
+                    await logSimulatedTrade('stopLoss', simulatedOrder);
                     orders.push(simulatedOrder);
                 } else {
-                    const order = await this.exchange.createOrder(
+                    const order = await exchange.createOrder(
                         config.SYMBOL,
                         'market',
                         'sell',
@@ -159,7 +166,13 @@ class Trader {
             console.error('止损失败:', error);
             throw error;
         }
-    }
-}
+    };
 
-module.exports = Trader; 
+    return {
+        openPosition,
+        closePosition,
+        stopLoss
+    };
+};
+
+module.exports = createTrader; 
