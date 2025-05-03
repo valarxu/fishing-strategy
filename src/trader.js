@@ -168,10 +168,55 @@ const createTrader = () => {
         }
     };
 
+    // 取消所有订单
+    const cancelAllOrders = async () => {
+        try {
+            if (config.IS_SIMULATION) {
+                console.log('模拟取消所有订单');
+                return;
+            } else {
+                const orders = await exchange.fetchOpenOrders(config.SYMBOL);
+                for (const order of orders) {
+                    await exchange.cancelOrder(order.id, config.SYMBOL);
+                }
+                console.log('已取消所有订单');
+            }
+        } catch (error) {
+            console.error('取消订单失败:', error);
+            throw error;
+        }
+    };
+
+    // 放置限价单
+    const placeLimitOrder = async (price) => {
+        try {
+            const amount = config.POSITION_SIZE / price;
+            if (config.IS_SIMULATION) {
+                console.log('模拟放置限价单:', { price, amount });
+                return { id: Date.now().toString(), price, amount };
+            } else {
+                const order = await exchange.createOrder(
+                    config.SYMBOL,
+                    'limit',
+                    'buy',
+                    amount,
+                    price
+                );
+                console.log('放置限价单成功:', order);
+                return order;
+            }
+        } catch (error) {
+            console.error('放置限价单失败:', error);
+            throw error;
+        }
+    };
+
     return {
         openPosition,
         closePosition,
-        stopLoss
+        stopLoss,
+        cancelAllOrders,
+        placeLimitOrder
     };
 };
 

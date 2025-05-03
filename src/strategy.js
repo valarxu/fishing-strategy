@@ -5,6 +5,7 @@ const createTradingStrategy = () => {
     let positions = [];
     let currentPositions = 0;
     let markPrice = 0;
+    let limitOrders = [];
     let initialized = false;
 
     // 初始化批量开仓
@@ -14,13 +15,13 @@ const createTradingStrategy = () => {
         const orders = [];
         let currentPrice = initialPrice;
         
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < 10; i++) {
             orders.push({
                 buyPrice: currentPrice,
                 expectedSellPrice: currentPrice * (1 + config.PRICE_CHANGE_THRESHOLD),
                 timestamp: Date.now()
             });
-            currentPrice = currentPrice * (1 - 0.005); // 每个订单价格降低0.5%
+            currentPrice = currentPrice * (1 - config.PRICE_CHANGE_THRESHOLD);
         }
         
         initialized = true;
@@ -99,9 +100,42 @@ const createTradingStrategy = () => {
         return closedPositions;
     };
 
+    // 获取最低挂单价
+    const getLowestOrderPrice = () => {
+        if (limitOrders.length === 0) return null;
+        return Math.min(...limitOrders.map(order => order.buyPrice));
+    };
+
+    // 更新限价单
+    const updateLimitOrders = (newPrice) => {
+        limitOrders = [];
+        let currentPrice = newPrice;
+        
+        for (let i = 0; i < 10; i++) {
+            limitOrders.push({
+                buyPrice: currentPrice,
+                expectedSellPrice: currentPrice * (1 + config.PRICE_CHANGE_THRESHOLD),
+                timestamp: Date.now()
+            });
+            currentPrice = currentPrice * (1 - config.PRICE_CHANGE_THRESHOLD);
+        }
+    };
+
+    // 添加新的限价单
+    const addNewLimitOrder = (basePrice) => {
+        const newPrice = basePrice * (1 - config.PRICE_CHANGE_THRESHOLD);
+        limitOrders.push({
+            buyPrice: newPrice,
+            expectedSellPrice: newPrice * (1 + config.PRICE_CHANGE_THRESHOLD),
+            timestamp: Date.now()
+        });
+    };
+
     return {
         positions,
         currentPositions,
+        markPrice,
+        limitOrders,
         initializeBatchOrders,
         updatePrices,
         shouldOpenPosition,
@@ -109,7 +143,10 @@ const createTradingStrategy = () => {
         shouldStopLoss,
         openPosition,
         closePosition,
-        clearAllPositions
+        clearAllPositions,
+        getLowestOrderPrice,
+        updateLimitOrders,
+        addNewLimitOrder
     };
 };
 
