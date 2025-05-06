@@ -8,34 +8,76 @@ const createTradingStrategy = () => {
     let limitOrders = [];
     let initialized = false;
 
-    // 初始化批量开仓
-    const initializeBatchOrders = (initialPrice) => {
+    // 初始化网格订单
+    const initializeGridOrders = (initialPrice) => {
         if (initialized) return [];
         
         const orders = [];
         let currentPrice = initialPrice;
         
-        for (let i = 0; i < 10; i++) {
+        // 创建网格订单
+        for (let i = 0; i < config.GRID_COUNT; i++) {
+            const gridPrice = currentPrice * (1 - config.GRID_SPACING * (i + 1));
             orders.push({
-                buyPrice: currentPrice,
-                expectedSellPrice: currentPrice * (1 + config.PRICE_CHANGE_THRESHOLD),
+                buyPrice: gridPrice,
+                expectedSellPrice: gridPrice * (1 + config.GRID_PROFIT_RATIO),
                 timestamp: Date.now()
             });
-            currentPrice = currentPrice * (1 - config.PRICE_CHANGE_THRESHOLD);
         }
         
         initialized = true;
+        markPrice = initialPrice;
         return orders;
     };
 
-    // 更新标记价格
+    // 更新标记价格和订单
     const updatePrices = (closePrice) => {
-        markPrice = closePrice;
+        // 只有在没有持仓且价格上涨时更新标记价格
+        if (currentPositions === 0 && closePrice > markPrice) {
+            markPrice = closePrice;
+            return true;
+        }
+        return false;
     };
 
-    // 检查是否满足开仓条件
-    const shouldOpenPosition = (kline) => {
-        return !initialized && currentPositions === 0;
+    // 更新限价单
+    const updateLimitOrders = (newPrice) => {
+        limitOrders = [];
+        // 创建网格订单
+        for (let i = 0; i < config.GRID_COUNT; i++) {
+            const gridPrice = newPrice * (1 - config.GRID_SPACING * (i + 1));
+            limitOrders.push({
+                buyPrice: gridPrice,
+                expectedSellPrice: gridPrice * (1 + config.GRID_PROFIT_RATIO),
+                timestamp: Date.now()
+            });
+        }
+    };
+
+    // 添加新的限价单（在最低价格下方）
+    const addNewLimitOrder = () => {
+        if (limitOrders.length === 0) return;
+        
+        const lowestOrder = limitOrders.reduce((min, order) => 
+            order.buyPrice < min.buyPrice ? order : min
+        );
+        
+        const newBuyPrice = lowestOrder.buyPrice * (1 - config.GRID_SPACING);
+        limitOrders.push({
+            buyPrice: newBuyPrice,
+            expectedSellPrice: newBuyPrice * (1 + config.GRID_PROFIT_RATIO),
+            timestamp: Date.now()
+        });
+    };
+
+    // 添加平仓后的新订单
+    const addOrderAfterClose = (closePrice) => {
+        const newBuyPrice = closePrice * (1 - config.GRID_SPACING);
+        limitOrders.push({
+            buyPrice: newBuyPrice,
+            expectedSellPrice: newBuyPrice * (1 + config.GRID_PROFIT_RATIO),
+            timestamp: Date.now()
+        });
     };
 
     // 检查是否满足平仓条件
@@ -55,28 +97,12 @@ const createTradingStrategy = () => {
         return positionsToClose;
     };
 
-    // 检查是否需要止损
-    const shouldStopLoss = (kline) => {
-        if (currentPositions > 0) {
-            const totalBuyPrice = positions.reduce((sum, pos) => sum + pos.buyPrice, 0);
-            const averagePrice = totalBuyPrice / positions.length;
-
-            if (kline.close < averagePrice * config.STOP_LOSS_THRESHOLD) {
-                return {
-                    averagePrice,
-                    currentPrice: kline.close
-                };
-            }
-        }
-        return null;
-    };
-
     // 开仓
-    const openPosition = (kline) => {
+    const openPosition = (price) => {
         const position = {
-            buyPrice: kline.close,
-            expectedSellPrice: kline.close * (1 + config.PRICE_CHANGE_THRESHOLD),
-            timestamp: kline.timestamp
+            buyPrice: price,
+            expectedSellPrice: price * (1 + config.GRID_PROFIT_RATIO),
+            timestamp: Date.now()
         };
 
         positions.push(position);
@@ -92,43 +118,10 @@ const createTradingStrategy = () => {
         return position;
     };
 
-    // 清空所有仓位（用于止损）
-    const clearAllPositions = () => {
-        const closedPositions = [...positions];
-        positions = [];
-        currentPositions = 0;
-        return closedPositions;
-    };
-
     // 获取最低挂单价
     const getLowestOrderPrice = () => {
         if (limitOrders.length === 0) return null;
         return Math.min(...limitOrders.map(order => order.buyPrice));
-    };
-
-    // 更新限价单
-    const updateLimitOrders = (newPrice) => {
-        limitOrders = [];
-        let currentPrice = newPrice;
-        
-        for (let i = 0; i < 10; i++) {
-            limitOrders.push({
-                buyPrice: currentPrice,
-                expectedSellPrice: currentPrice * (1 + config.PRICE_CHANGE_THRESHOLD),
-                timestamp: Date.now()
-            });
-            currentPrice = currentPrice * (1 - config.PRICE_CHANGE_THRESHOLD);
-        }
-    };
-
-    // 添加新的限价单
-    const addNewLimitOrder = (basePrice) => {
-        const newPrice = basePrice * (1 - config.PRICE_CHANGE_THRESHOLD);
-        limitOrders.push({
-            buyPrice: newPrice,
-            expectedSellPrice: newPrice * (1 + config.PRICE_CHANGE_THRESHOLD),
-            timestamp: Date.now()
-        });
     };
 
     return {
@@ -136,17 +129,15 @@ const createTradingStrategy = () => {
         currentPositions,
         markPrice,
         limitOrders,
-        initializeBatchOrders,
+        initializeGridOrders,
         updatePrices,
-        shouldOpenPosition,
         shouldClosePositions,
-        shouldStopLoss,
         openPosition,
         closePosition,
-        clearAllPositions,
         getLowestOrderPrice,
         updateLimitOrders,
-        addNewLimitOrder
+        addNewLimitOrder,
+        addOrderAfterClose
     };
 };
 

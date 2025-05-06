@@ -19,13 +19,13 @@ const createTradingBot = () => {
     // 处理K线数据
     const handleKlineClose = async (kline) => {
         try {
-            console.log('收到5分钟K线:', kline);
+            console.log('收到K线:', kline);
 
-            // 更新价格
-            strategy.updatePrices(kline.close);
-
-            // 检查是否需要更新限价单
-            if (strategy.currentPositions === 0 && lastPrice && kline.close > lastPrice) {
+            // 更新价格并检查是否需要更新订单
+            const shouldUpdateOrders = strategy.updatePrices(kline.close);
+            
+            // 如果价格上涨且没有持仓，更新订单
+            if (shouldUpdateOrders) {
                 console.log('价格上涨，更新限价单');
                 await trader.cancelAllOrders();
                 strategy.updateLimitOrders(kline.close);
@@ -33,7 +33,6 @@ const createTradingBot = () => {
                     await trader.placeLimitOrder(order.buyPrice);
                 }
             }
-            lastPrice = kline.close;
 
             // 检查是否有仓位需要平仓
             const positionsToClose = strategy.shouldClosePositions(kline);
@@ -46,22 +45,11 @@ const createTradingBot = () => {
                     await positionManager.removePosition(index);
                     
                     // 平仓后添加新的限价单
-                    strategy.addNewLimitOrder(position.buyPrice);
+                    strategy.addOrderAfterClose(kline.close);
                     const newOrder = strategy.limitOrders[strategy.limitOrders.length - 1];
                     await trader.placeLimitOrder(newOrder.buyPrice);
                 }
                 await notifyPositionStatus();
-            }
-
-            // 检查是否需要止损
-            const stopLossSignal = strategy.shouldStopLoss(kline);
-            if (stopLossSignal) {
-                console.log('触发止损信号:', stopLossSignal);
-                const positions = strategy.clearAllPositions();
-                await trader.stopLoss(positions, kline.close);
-                await positionManager.clearPositions();
-                await notifyPositionStatus();
-                return;
             }
 
         } catch (error) {
