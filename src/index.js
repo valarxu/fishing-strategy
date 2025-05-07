@@ -9,7 +9,6 @@ const createTradingBot = () => {
     const strategy = new TradingStrategy();
     const positionManager = new PositionManager();
     const trader = new Trader();
-    let lastPrice = null;
 
     // 通知持仓状态
     const notifyPositionStatus = async () => {

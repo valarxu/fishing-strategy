@@ -8,28 +8,6 @@ const createTradingStrategy = () => {
     let limitOrders = [];
     let initialized = false;
 
-    // 初始化网格订单
-    const initializeGridOrders = (initialPrice) => {
-        if (initialized) return [];
-        
-        const orders = [];
-        let currentPrice = initialPrice;
-        
-        // 创建网格订单
-        for (let i = 0; i < config.GRID_COUNT; i++) {
-            const gridPrice = currentPrice * (1 - config.GRID_SPACING * (i + 1));
-            orders.push({
-                buyPrice: gridPrice,
-                expectedSellPrice: gridPrice * (1 + config.GRID_PROFIT_RATIO),
-                timestamp: Date.now()
-            });
-        }
-        
-        initialized = true;
-        markPrice = initialPrice;
-        return orders;
-    };
-
     // 更新标记价格和订单
     const updatePrices = (closePrice) => {
         // 只有在没有持仓且价格上涨时更新标记价格
@@ -52,6 +30,8 @@ const createTradingStrategy = () => {
                 timestamp: Date.now()
             });
         }
+        initialized = true;
+        markPrice = newPrice;
     };
 
     // 添加新的限价单（在最低价格下方）
@@ -97,19 +77,6 @@ const createTradingStrategy = () => {
         return positionsToClose;
     };
 
-    // 开仓
-    const openPosition = (price) => {
-        const position = {
-            buyPrice: price,
-            expectedSellPrice: price * (1 + config.GRID_PROFIT_RATIO),
-            timestamp: Date.now()
-        };
-
-        positions.push(position);
-        currentPositions++;
-        return position;
-    };
-
     // 平仓
     const closePosition = (index) => {
         const position = positions[index];
@@ -127,12 +94,9 @@ const createTradingStrategy = () => {
     return {
         positions,
         currentPositions,
-        markPrice,
         limitOrders,
-        initializeGridOrders,
         updatePrices,
         shouldClosePositions,
-        openPosition,
         closePosition,
         getLowestOrderPrice,
         updateLimitOrders,

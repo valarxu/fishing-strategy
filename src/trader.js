@@ -21,30 +21,6 @@ const createTrader = () => {
         }
     };
 
-    // 开仓
-    const openPosition = async (price) => {
-        try {
-            const amount = config.POSITION_SIZE / price;
-            const order = await exchange.createOrder(
-                config.SYMBOL,
-                'limit',
-                'buy',
-                amount,
-                price
-            );
-            console.log('开仓成功:', order);
-            await notifier.notifyOpenPosition({
-                buyPrice: price,
-                amount: amount,
-                size: config.POSITION_SIZE
-            });
-            return order;
-        } catch (error) {
-            console.error('开仓失败:', error);
-            throw error;
-        }
-    };
-
     // 平仓
     const closePosition = async (price, amount) => {
         try {
@@ -103,7 +79,6 @@ const createTrader = () => {
 
     return {
         getOpenOrders,
-        openPosition,
         closePosition,
         cancelAllOrders,
         placeLimitOrder
