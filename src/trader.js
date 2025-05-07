@@ -10,6 +10,17 @@ const createTrader = () => {
         password: config.PASSPHRASE
     });
 
+    // 获取未成交订单
+    const getOpenOrders = async () => {
+        try {
+            const orders = await exchange.fetchOpenOrders(config.SYMBOL);
+            return orders;
+        } catch (error) {
+            console.error('获取未成交订单失败:', error);
+            throw error;
+        }
+    };
+
     // 开仓
     const openPosition = async (price) => {
         try {
@@ -91,6 +102,7 @@ const createTrader = () => {
     };
 
     return {
+        getOpenOrders,
         openPosition,
         closePosition,
         cancelAllOrders,

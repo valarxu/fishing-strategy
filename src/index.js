@@ -52,6 +52,25 @@ const createTradingBot = () => {
                 await notifyPositionStatus();
             }
 
+            // 检查是否有订单成交（开仓）
+            const openOrders = await trader.getOpenOrders();
+            if (openOrders.length < config.GRID_COUNT) {
+                console.log('检测到订单成交，补充新订单');
+                // 计算需要补充的订单数量
+                const ordersToAdd = config.GRID_COUNT - openOrders.length;
+                
+                // 获取当前最低价格
+                const lowestPrice = strategy.getLowestOrderPrice();
+                if (lowestPrice) {
+                    // 补充订单
+                    for (let i = 0; i < ordersToAdd; i++) {
+                        strategy.addNewLimitOrder();
+                        const newOrder = strategy.limitOrders[strategy.limitOrders.length - 1];
+                        await trader.placeLimitOrder(newOrder.buyPrice);
+                    }
+                }
+            }
+
         } catch (error) {
             console.error('处理K线数据时出错:', error);
         }
