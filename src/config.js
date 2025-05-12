@@ -31,5 +31,21 @@ module.exports = {
     GRID_COUNT: 5,  // 网格数量
 
     // K线间隔
-    KLINE_INTERVAL: '5m'
+    KLINE_INTERVAL: '5m',
+
+    // 合约参数
+    BTC_USDT_SWAP: {
+        instId: 'BTC-USDT-SWAP',
+        ctVal: '0.01',
+        ctValCcy: 'BTC',
+        lotSz: '0.01',
+        minSz: '0.01',
+    },
+    ETH_USDT_SWAP: {
+        instId: 'ETH-USDT-SWAP',
+        ctVal: '0.1',
+        ctValCcy: 'ETH',
+        lotSz: '0.01',
+        minSz: '0.01',
+    }
 }; 

@@ -3,6 +3,7 @@ const TradingStrategy = require('./strategy');
 const PositionManager = require('./positionManager');
 const Trader = require('./trader');
 const notifier = require('./notifier');
+const config = require('./config');
 
 // 创建交易机器人实例
 const createTradingBot = () => {
@@ -26,10 +27,10 @@ const createTradingBot = () => {
             // 如果价格上涨且没有持仓，更新订单
             if (shouldUpdateOrders) {
                 console.log('价格上涨，更新限价单');
-                await trader.cancelAllOrders();
+                await trader.cancelAllOrders(config.BTC_USDT_SWAP.instId);
                 strategy.updateLimitOrders(kline.close);
                 for (const order of strategy.limitOrders) {
-                    await trader.placeLimitOrder(order.buyPrice);
+                    await trader.placeLimitOrder(config.BTC_USDT_SWAP.instId, order.buyPrice, 'long');
                 }
             }
 
@@ -39,20 +40,20 @@ const createTradingBot = () => {
                 for (const { index, position } of positionsToClose) {
                     console.log('准备平仓:', position);
                     const amount = position.amount || (position.size / position.buyPrice);
-                    await trader.closePosition(kline.close, amount);
+                    await trader.closePosition(config.BTC_USDT_SWAP.instId, kline.close, amount, 'long');
                     strategy.closePosition(index);
                     await positionManager.removePosition(index);
                     
                     // 平仓后添加新的限价单
                     strategy.addOrderAfterClose(kline.close);
                     const newOrder = strategy.limitOrders[strategy.limitOrders.length - 1];
-                    await trader.placeLimitOrder(newOrder.buyPrice);
+                    await trader.placeLimitOrder(config.BTC_USDT_SWAP.instId, newOrder.buyPrice, 'long');
                 }
                 await notifyPositionStatus();
             }
 
             // 检查是否有订单成交（开仓）
-            const openOrders = await trader.getOpenOrders();
+            const openOrders = await trader.getOpenOrders(config.BTC_USDT_SWAP.instId);
             if (openOrders.length < config.GRID_COUNT) {
                 console.log('检测到订单成交，补充新订单');
                 // 计算需要补充的订单数量
@@ -65,7 +66,7 @@ const createTradingBot = () => {
                     for (let i = 0; i < ordersToAdd; i++) {
                         strategy.addNewLimitOrder();
                         const newOrder = strategy.limitOrders[strategy.limitOrders.length - 1];
-                        await trader.placeLimitOrder(newOrder.buyPrice);
+                        await trader.placeLimitOrder(config.BTC_USDT_SWAP.instId, newOrder.buyPrice, 'long');
                     }
                 }
             }
@@ -92,7 +93,7 @@ const createTradingBot = () => {
                 const lowestPrice = Math.min(...savedPositions.map(pos => pos.buyPrice));
                 strategy.updateLimitOrders(lowestPrice);
                 for (const order of strategy.limitOrders) {
-                    await trader.placeLimitOrder(order.buyPrice);
+                    await trader.placeLimitOrder(config.BTC_USDT_SWAP.instId, order.buyPrice, 'long');
                 }
                 
                 // 初始化时推送一次持仓状态
